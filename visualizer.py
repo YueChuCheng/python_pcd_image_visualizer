@@ -34,6 +34,7 @@ from natsort import natsorted
 import threading
 
 import time
+import cv2
 
 
 # This example displays a point cloud and if you Ctrl-click on a point
@@ -54,9 +55,6 @@ class ExampleApp:
         self.window.set_on_layout(self._on_layout)
         self.widget3d = gui.SceneWidget()
         self.window.add_child(self.widget3d)
-        self.info = gui.Label("")
-        self.info.visible = False
-        self.window.add_child(self.info)
 
         self.widget3d.scene = rendering.Open3DScene(self.window.renderer)
 
@@ -65,15 +63,12 @@ class ExampleApp:
 
         self.mat = rendering.MaterialRecord()
         self.mat.shader = "defaultUnlit"
-        # Point size is in native pixels, but "pixel" means different things to
-        # different platforms (macOS, in particular), so multiply by Window scale
-        # factor.
         self.mat.point_size = 1 * self.window.scaling
 
-        bounds = self.widget3d.scene.bounding_box
-        center = bounds.get_center()
-        self.widget3d.setup_camera(60, bounds, center)
-        self.widget3d.look_at(center, center - [0, 0, 3], [0, -1, 0])
+        # bounds = self.widget3d.scene.bounding_box
+        # center = bounds.get_center()
+        # self.widget3d.setup_camera(60, bounds, center)
+        # self.widget3d.look_at(center, center - [0, 0, 3], [0, -1, 0])
 
         self.widget3d.set_on_mouse(self._on_mouse_widget3d)
 
@@ -152,16 +147,56 @@ class ExampleApp:
 
         lines.paint_uniform_color([1.0, 1.0, 0.0])
 
-        mat_line = o3d.visualization.rendering.MaterialRecord()
-        mat_line.shader = "unlitLine"
-        mat_line.line_width = 2
+        self.mat.line_width = 2
 
-        self.widget3d.scene.add_geometry("bbox", lines, mat_line)
+        self.widget3d.scene.add_geometry("bbox", lines, self.mat)
 
         # add label
+        self.text_ori_size = 4.0
+        self.wheelCount = 0.0
+
         self.l = self.widget3d.add_3d_label([0.5, 0.5, 0.5], "test")
         self.l.color = gui.Color(1.0, 1.0, 0.0)
-        self.l.scale = 2
+        self.l.scale = self.text_ori_size
+
+        # ground box
+        vert = [
+            [0, 0, 0],
+            [0, 1, 0],
+            [1, 1, 0],
+            [1, 0, 0],
+            [0, 0, 1],
+            [0, 1, 1],
+            [1, 1, 1],
+            [1, 0, 1],
+        ]
+
+        faces = [
+            [0, 1, 2],
+            [0, 2, 3],
+            [6, 5, 4],
+            [7, 6, 4],
+            [5, 1, 0],
+            [0, 4, 5],
+            [3, 2, 6],
+            [6, 7, 3],
+            [0, 3, 7],
+            [0, 7, 4],
+            [1, 5, 6],
+            [1, 6, 2],
+        ]
+
+        m = o3d.geometry.TriangleMesh(
+            o3d.utility.Vector3dVector(vert),
+            o3d.utility.Vector3iVector(faces),
+        )
+
+        self.mat.albedo_img = o3d.io.read_image("./data/bg/bg.jpeg")
+
+        self.widget3d.scene.add_geometry("ground", m, self.mat)
+
+        # axes
+        # self.widget3d.scene.show_axes(True)
 
     def _on_close(self):
         self.is_window_close = True
@@ -226,11 +261,13 @@ class ExampleApp:
         # We could override BUTTON_DOWN without a modifier, but that would
         # interfere with manipulating the scene.
 
-        # update text size
+        # responsive text size
         if event.type == gui.MouseEvent.Type.WHEEL:
+            # print(self.l.scale)
 
             def update_label():
-                self.l.scale = max(self.l.scale - (0.1 * event.wheel_dy), 0)
+                self.wheelCount += event.wheel_dy
+                self.l.scale = max(self.text_ori_size - (0.1 * self.wheelCount), 0)
 
             gui.Application.instance.post_to_main_thread(self.window, update_label)
 
@@ -241,10 +278,6 @@ class ExampleApp:
 def main():
     app = gui.Application.instance
     app.initialize()
-
-    # This example will also work with a triangle mesh, or any 3D object.
-    # If you use a triangle mesh you will probably want to set the material
-    # shader to "defaultLit" instead of "defaultUnlit".
 
     ex = ExampleApp()
 
