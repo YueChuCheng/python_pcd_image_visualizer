@@ -1,4 +1,3 @@
-from genericpath import exists
 from glob import glob
 from cv2 import imread
 import numpy as np
@@ -7,12 +6,9 @@ import open3d.visualization.gui as gui
 import open3d.visualization.rendering as rendering
 import glob
 from natsort import natsorted
-import threading
-
-import time
-import cv2
-import math
 import numpy as np
+
+from pathlib import Path
 
 
 def camera_init(widget: o3d.visualization.gui, distance: float):
@@ -25,7 +21,12 @@ def window_init(window_name: str, window_width: int, window_height: int):
     return app.create_window(window_name, window_width, window_height)
 
 
-def set_layout(layout_context, window, widget3d, panel):
+def set_layout(
+    layout_context,
+    window: o3d.visualization.gui,
+    widget3d,
+    panels_layout: o3d.visualization.gui,
+):
     contentRect = window.content_rect
     panel_width = 20 * layout_context.theme.font_size  # 15 ems wide
 
@@ -36,7 +37,7 @@ def set_layout(layout_context, window, widget3d, panel):
         contentRect.height,
     )
 
-    panel.frame = gui.Rect(
+    panels_layout.frame = gui.Rect(
         widget3d.frame.get_right(),
         contentRect.y,
         panel_width,
@@ -100,16 +101,52 @@ def get_files(folder_path: str, type: str = None):
     return f
 
 
-def panel_init(window, font_size, elements: list):
+def get_files_sv(folder_path: str, type: str = None):
+    f = []
 
-    panel = gui.CollapsableVert("Camera 1", font_size)
+    result = list(Path(".").rglob(folder_path))
+    if type == "image":
+        for path in natsorted(result):
+            img = o3d.io.read_image(str(path))
+            f.append(img)
+
+    elif type == "pcd":
+        for path in natsorted(result):
+
+            cloud = o3d.io.read_point_cloud(str(path))
+            cloud.paint_uniform_color([1.0, 1.0, 1.0])
+            f.append(cloud)
+
+    else:
+        exit("no match file type")
+
+    return f
+
+
+def panel_init(
+    window: o3d.visualization.gui, font_size: float, elements: list, name: str
+):
+
+    panel = gui.CollapsableVert(name, font_size)
 
     for ele in elements:
         panel.add_child(ele)
 
-    window.add_child(panel)
-
     return panel
+
+
+def panel_layout_init(window: o3d.visualization.gui, margin: float, panels: list):
+
+    layout = gui.Vert(
+        margin * window.theme.font_size,
+        gui.Margins(margin),
+    )
+    window.add_child(layout)
+
+    for panel in panels:
+        layout.add_child(panel)
+
+    return layout
 
 
 def ground_image_init(
@@ -118,14 +155,14 @@ def ground_image_init(
 
     im = imread(path)
 
-    w = im.shape[0] / 2 * 0.18
-    h = im.shape[1] / 2 * 0.18
+    w = im.shape[0] / 2 * 0.15
+    h = im.shape[1] / 2 * 0.15
 
     vert = [
-        [-h, -w, -2],
-        [-h, w, -2],
-        [h, w, -2],
-        [h, -w, -2],
+        [-h + 10, -w - 5, -2],
+        [-h + 10, +w - 5, -2],
+        [+h + 10, +w - 5, -2],
+        [+h + 10, -w - 5, -2],
     ]
 
     faces = [
@@ -184,29 +221,36 @@ def convert_row_boxs_to_point(row_boxs: list):
         dy = float(box["dy"]) / 2
         dz = float(box["dz"]) / 2
 
-        rotate = float(box["heading"])
-        rotate_matrix = np.array(
+        heading = float(box["heading"])
+
+        cos = np.cos(heading)
+        sin = np.sin(heading)
+
+        rot = np.array(
             [
-                [math.cos(math.degrees(rotate)), -math.sin(math.degrees(rotate)), 0.0],
-                [math.sin(math.degrees(rotate)), math.cos(math.degrees(rotate)), 0.0],
+                [cos, -sin, 0.0],
+                [sin, cos, 0.0],
                 [0.0, 0.0, 1.0],
             ]
         )
-        # print(math.degrees(rotate))
+
+        center = np.array([[c_x, c_y, c_z]] * 8)
+
+        points = np.array(
+            [
+                [-dx, -dy, -dz],
+                [+dx, -dy, -dz],
+                [+dx, +dy, -dz],
+                [-dx, +dy, -dz],
+                [-dx, -dy, +dz],
+                [+dx, -dy, +dz],
+                [+dx, +dy, +dz],
+                [-dx, +dy, +dz],
+            ]
+        )
 
         # convert points
-        p0 = [c_x - dx, c_y - dy, c_z - dz]
-        p1 = [c_x + dx, c_y - dy, c_z - dz]
-        p2 = [c_x + dx, c_y + dy, c_z - dz]
-        p3 = [c_x - dx, c_y + dy, c_z - dz]
-        p4 = [c_x - dx, c_y - dy, c_z + dz]
-        p5 = [c_x + dx, c_y - dy, c_z + dz]
-        p6 = [c_x + dx, c_y + dy, c_z + dz]
-        p7 = [c_x - dx, c_y + dy, c_z + dz]
-
-        points = np.array([p0, p1, p2, p3, p4, p5, p6, p7])
-
-        # points = np.dot(points, rotate_matrix)
+        points = points @ rot.T + center
 
         box_info["points"] = points
 
