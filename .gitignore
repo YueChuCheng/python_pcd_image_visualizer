@@ -1,3 +1,4 @@
 data/
 todo
 *test*
+src/__pycache__/*
