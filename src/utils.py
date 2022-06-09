@@ -159,10 +159,10 @@ def ground_image_init(
     h = im.shape[1] / 2 * 0.15
 
     vert = [
-        [-h + 10, -w - 5, -2],
-        [-h + 10, +w - 5, -2],
-        [+h + 10, +w - 5, -2],
-        [+h + 10, -w - 5, -2],
+        [-h + 10, -w - 5, -1.5],
+        [-h + 10, +w - 5, -1.5],
+        [+h + 10, +w - 5, -1.5],
+        [+h + 10, -w - 5, -1.5],
     ]
 
     faces = [
@@ -258,6 +258,65 @@ def convert_row_boxs_to_point(row_boxs: list):
         frame[int(box["frame_id"])].append(box_info)
 
     return frame
+
+
+def json2point(frames: list):
+
+    total_frame_num = len(frames)
+
+    result_frames = [[] for i in range(0, total_frame_num)]
+
+    for frame_id, f in enumerate(frames):
+
+        for idx in range(len(f["figures"])):
+            box_info = dict()
+            points = []  # 8:3
+
+            c_x = f["figures"][idx]["geometry"]["position"]["x"]
+            c_y = f["figures"][idx]["geometry"]["position"]["y"]
+            c_z = f["figures"][idx]["geometry"]["position"]["z"]
+
+            dx = f["figures"][idx]["geometry"]["dimensions"]["x"] / 2
+            dy = f["figures"][idx]["geometry"]["dimensions"]["y"] / 2
+            dz = f["figures"][idx]["geometry"]["dimensions"]["z"] / 2
+
+            heading = f["figures"][idx]["geometry"]["rotation"]["z"]
+
+            cos = np.cos(heading)
+            sin = np.sin(heading)
+
+            rot = np.array(
+                [
+                    [cos, -sin, 0.0],
+                    [sin, cos, 0.0],
+                    [0.0, 0.0, 1.0],
+                ]
+            )
+
+            center = np.array([[c_x, c_y, c_z]] * 8)
+
+            points = np.array(
+                [
+                    [-dx, -dy, -dz],
+                    [+dx, -dy, -dz],
+                    [+dx, +dy, -dz],
+                    [-dx, +dy, -dz],
+                    [-dx, -dy, +dz],
+                    [+dx, -dy, +dz],
+                    [+dx, +dy, +dz],
+                    [-dx, +dy, +dz],
+                ]
+            )
+
+            # convert points
+            points = points @ rot.T + center
+
+            box_info["points"] = points
+
+            # append box point
+            result_frames[frame_id].append(box_info)
+
+    return result_frames
 
 
 def draw_bbox(

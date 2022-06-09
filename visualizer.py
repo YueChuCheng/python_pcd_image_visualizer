@@ -1,19 +1,14 @@
-from glob import glob
-from cv2 import imread
 import numpy as np
-import open3d as o3d
 import open3d.visualization.gui as gui
-import open3d.visualization.rendering as rendering
-import glob
-from natsort import natsorted
 import threading
 
 import time
-import cv2
-
+import json
 import csv
-from pathlib import Path
+import pandas as pd
 
+from pathlib import Path
+from natsort import natsorted
 from src.utils import (
     window_init,
     set_layout,
@@ -28,6 +23,7 @@ from src.utils import (
     camera_init,
     panel_layout_init,
     get_files,
+    json2point,
 )
 
 
@@ -55,14 +51,15 @@ class App:
         )
 
         self.materials["ground"] = material_init(
-            shader_name="defaultUnlit", texture_image_path="./data/bg/bg.jpg"
+            shader_name="defaultUnlit", texture_image_path="./data/bg/bg.png"
         )
+        self.materials["ground"].base_color = np.array([1, 1, 1, 0.8])
 
         ##### get data files #####
 
         # get pcd files
         self.pcd = get_files_sv(
-            "./data/exp/data-writer/0/pcd/dataset/pointcloud/*.pcd", "pcd"
+            "./data/tmp_sv/output/data-writer/0/pcd/dataset/pointcloud/*.pcd", "pcd"
         )
         self.widget3d.scene.add_geometry(
             "Point Cloud", self.pcd[0], self.materials["pcd"]
@@ -70,41 +67,41 @@ class App:
 
         # get camera1 images
         self.wayside_1_camera1_img = get_files_sv(
-            "./data/exp/data-writer/0/pcd/dataset/related_images/*/wayside_1_camera1.jpg",
+            "./data/tmp_sv/output/data-writer/0/pcd/dataset/related_images/*/wayside_1_camera1.jpg",
             "image",
         )
         self.wayside_1_camera2_img = get_files_sv(
-            "./data/exp/data-writer/0/pcd/dataset/related_images/*/wayside_1_camera2.jpg",
+            "./data/tmp_sv/output/data-writer/0/pcd/dataset/related_images/*/wayside_1_camera2.jpg",
             "image",
         )
         self.wayside_1_camera3_img = get_files_sv(
-            "./data/exp/data-writer/0/pcd/dataset/related_images/*/wayside_1_camera3.jpg",
+            "./data/tmp_sv/output/data-writer/0/pcd/dataset/related_images/*/wayside_1_camera3.jpg",
             "image",
         )
 
         self.wayside_2_camera1_img = get_files_sv(
-            "./data/exp/data-writer/0/pcd/dataset/related_images/*/wayside_2_camera1.jpg",
+            "./data/tmp_sv/output/data-writer/0/pcd/dataset/related_images/*/wayside_2_camera1.jpg",
             "image",
         )
         self.wayside_2_camera2_img = get_files_sv(
-            "./data/exp/data-writer/0/pcd/dataset/related_images/*/wayside_2_camera2.jpg",
+            "./data/tmp_sv/output/data-writer/0/pcd/dataset/related_images/*/wayside_2_camera2.jpg",
             "image",
         )
         self.wayside_2_camera3_img = get_files_sv(
-            "./data/exp/data-writer/0/pcd/dataset/related_images/*/wayside_2_camera3.jpg",
+            "./data/tmp_sv/output/data-writer/0/pcd/dataset/related_images/*/wayside_2_camera3.jpg",
             "image",
         )
 
         self.wayside_3_camera1_img = get_files_sv(
-            "./data/exp/data-writer/0/pcd/dataset/related_images/*/wayside_3_camera1.jpg",
+            "./data/tmp_sv/output/data-writer/0/pcd/dataset/related_images/*/wayside_3_camera1.jpg",
             "image",
         )
         self.wayside_3_camera2_img = get_files_sv(
-            "./data/exp/data-writer/0/pcd/dataset/related_images/*/wayside_3_camera2.jpg",
+            "./data/tmp_sv/output/data-writer/0/pcd/dataset/related_images/*/wayside_3_camera2.jpg",
             "image",
         )
         self.wayside_3_camera3_img = get_files_sv(
-            "./data/exp/data-writer/0/pcd/dataset/related_images/*/wayside_3_camera3.jpg",
+            "./data/tmp_sv/output/data-writer/0/pcd/dataset/related_images/*/wayside_3_camera3.jpg",
             "image",
         )
 
@@ -184,14 +181,30 @@ class App:
         self.window.set_on_close(self._on_close)
 
         ##### bbox #####
-        row_boxs = []
-        with open("./data/exp/dataframe-writer/boxes.csv", newline="") as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                row_boxs.append(row)
+
+        # read csv
+        # row_boxs = []
+        # with open("./data/exp/dataframe-writer/boxes.csv", newline="") as csvfile:
+        #     reader = csv.DictReader(csvfile)
+        #     for row in reader:
+        #         row_boxs.append(row)
+
+        # read json
+        frames = []
+        paths = natsorted(
+            list(
+                Path(".").rglob(
+                    "./data/tmp_sv/output/data-writer/0/pcd/dataset/ann/*.json"
+                )
+            )
+        )
+
+        for path in paths:
+            with open(path) as f:
+                frames.append(json.load(f))
 
         # convert row boxs to point
-        self.bboxs = convert_row_boxs_to_point(row_boxs)
+        self.bboxs = json2point(frames)
         self.bboxs_num = 0
 
         self.bboxs_num = draw_bbox(
@@ -220,7 +233,7 @@ class App:
         ##### set ground image #####
 
         # ground box
-        ground = ground_image_init(path="./data/bg/bg.jpg")
+        ground = ground_image_init(path="./data/bg/bg.png")
         self.widget3d.scene.add_geometry("ground", ground, self.materials["ground"])
 
         # axes
